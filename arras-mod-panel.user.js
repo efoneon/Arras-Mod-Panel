@@ -385,11 +385,6 @@
         toggles a mode you don't want stuck on.
       </p>
     </div>
-
-    <div style="display:flex;gap:6px;margin-top:12px;">
-      <button data-action="reset" style="flex:1;background:#2a2f3a;color:#fff;border:1px solid #3a4150;border-radius:6px;padding:6px 8px;">Reset</button>
-      <button data-action="hide" style="flex:1;background:#2a2f3a;color:#fff;border:1px solid #3a4150;border-radius:6px;padding:6px 8px;">Hide</button>
-    </div>
   `
 
   document.body.appendChild(menu)
@@ -466,16 +461,6 @@
       saveSettings()
       syncUiFromSettings()
       return
-    }
-    const action = e.target.getAttribute && e.target.getAttribute('data-action')
-    if (action === 'reset') {
-      Object.assign(settings, deepMerge(defaults, {}))
-      saveSettings()
-      syncUiFromSettings()
-      renderDot()
-      updateAutoSecondary()
-    } else if (action === 'hide') {
-      setMenuVisible(false)
     }
   })
 
