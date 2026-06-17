@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Arras.io Mod Panel
 // @namespace    https://github.com/efoneon/arras-mod-panel
-// @version      2.0.2
+// @version      2.0.3
 // @description  Mod panel for arras.io with a customizable cursor reticle and auto-hold right-click for tank secondary abilities. Press \ to open the menu.
-// @homepageURL  https://github.com/efoneon/arras-mod-panel
-// @supportURL   https://github.com/efoneon/arras-mod-panel/issues
-// @updateURL    https://github.com/efoneon/arras-mod-panel/raw/main/arras-mod-panel.user.js
-// @downloadURL  https://github.com/efoneon/arras-mod-panel/raw/main/arras-mod-panel.user.js
+// @homepageURL  https://github.com/efoneon/Arras-Mod-Panel
+// @supportURL   https://github.com/efoneon/Arras-Mod-Panel/issues
+// @updateURL    https://github.com/efoneon/Arras-Mod-Panel/raw/main/arras-mod-panel.user.js
+// @downloadURL  https://github.com/efoneon/Arras-Mod-Panel/raw/main/arras-mod-panel.user.js
 // @author       efoneon
 // @license      GPL-3.0-or-later
 // @match        *://arras.io/*
