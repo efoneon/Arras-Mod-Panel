@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Arras.io Mod Panel
 // @namespace    https://github.com/efoneon/arras-mod-panel
-// @version      2.0.4
+// @version      2.1.0
 // @description  Mod panel for arras.io with a customizable cursor reticle and auto-hold right-click for tank secondary abilities. Press \ to open the menu.
 // @homepageURL  https://github.com/efoneon/Arras-Mod-Panel
 // @supportURL   https://github.com/efoneon/Arras-Mod-Panel/issues
@@ -234,86 +234,55 @@
   )
 
   // ------- Auto-hold right-click (tank secondary) -------
-  // While enabled and playing, dispatch a synthetic right mousedown on the
-  // game canvas, and re-dispatch it whenever the cursor moves. Release on
-  // disable / pause / blur. Also suppress the context menu so right-click
-  // doesn't pop the browser menu over the game.
-  let autoSecondaryHeld = false
+  // Arras.io doesn't read mouse *events* for held buttons. The client folds
+  // held mouse/keyboard buttons into a bitfield and streams that state to the
+  // server in a binary "control" WebSocket packet: [0x43 ('C'), x, y, flags].
+  // The right mouse button is bit 0x40 in the flags field (the last byte).
+  //
+  // So to make the game think right-click is held, we patch WebSocket.send and
+  // OR 0x40 into the flags of every outgoing control packet while enabled and
+  // playing. This is how working arras mods do it; synthetic DOM mouse/pointer
+  // events are ignored because the input is state-polled, not event-driven.
+  const CONTROL_OPCODE = 0x43 // 'C'
+  const RIGHT_MOUSE_BIT = 0x40
 
-  // Dispatch the right-button press/release as both a PointerEvent and a
-  // MouseEvent, since arras.io may listen on either. `down` => button held,
-  // `up` => released. Targets both the canvas and window/document so the
-  // game's listener catches it regardless of where it's attached.
-  const fireSecondaryEvent = (down, target) => {
-    if (!target) return
-    const common = {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      button: 2,
-      buttons: down ? 2 : 0,
-      clientX: mouseX,
-      clientY: mouseY,
+  const shouldHoldSecondary = () => settings.autoSecondary.enabled && isPlaying
+
+  const realWsSend = window.WebSocket.prototype.send
+  window.WebSocket.prototype.send = function (data) {
+    try {
+      if (shouldHoldSecondary() && data) {
+        let u8 = null
+        if (data instanceof ArrayBuffer) u8 = new Uint8Array(data)
+        else if (ArrayBuffer.isView(data))
+          u8 = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+        // Control packet: first byte 'C'. Flags are the trailing byte (the
+        // facing coords can widen the packet, so target the last byte, not a
+        // fixed offset). OR in the right-mouse bit.
+        if (u8 && u8.length >= 2 && u8[0] === CONTROL_OPCODE) {
+          u8[u8.length - 1] |= RIGHT_MOUSE_BIT
+        }
+      }
+    } catch {
+      // Never let our hook break the game's networking.
     }
-    if (typeof PointerEvent === 'function') {
-      target.dispatchEvent(
-        new PointerEvent(down ? 'pointerdown' : 'pointerup', {
-          ...common,
-          pointerId: 1,
-          pointerType: 'mouse',
-          isPrimary: true,
-        })
-      )
-    }
-    target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', common))
+    return realWsSend.call(this, data)
   }
 
-  const holdSecondary = () => {
-    if (autoSecondaryHeld) return
-    const canvas = document.querySelector('canvas')
-    if (!canvas) return
-    autoSecondaryHeld = true
-    fireSecondaryEvent(true, canvas)
-  }
+  // Kept because the rest of the script calls it on play-state/setting changes.
+  // With the WebSocket hook the effect is applied per outgoing packet, so there
+  // is no press/release to manage here — this is now a no-op.
+  const updateAutoSecondary = () => {}
 
-  const releaseSecondary = () => {
-    if (!autoSecondaryHeld) return
-    autoSecondaryHeld = false
-    const canvas = document.querySelector('canvas')
-    fireSecondaryEvent(false, canvas)
-  }
-
-  const updateAutoSecondary = () => {
-    if (settings.autoSecondary.enabled && isPlaying) holdSecondary()
-    else releaseSecondary()
-  }
-
-  // Re-trigger mousedown on mousemove so games that re-poll on movement
-  // continue to register the hold. Cheap; only runs when actively held.
-  window.addEventListener(
-    'mousemove',
-    () => {
-      if (!autoSecondaryHeld) return
-      const canvas = document.querySelector('canvas')
-      fireSecondaryEvent(true, canvas)
-    },
-    {passive: true, capture: true}
-  )
-
-  // Suppress the browser context menu while auto-secondary is active so a
-  // real right-click (or our synthetic one) doesn't open it.
+  // Suppress the browser context menu while auto-secondary is active so a real
+  // right-click doesn't pop the browser menu over the game.
   window.addEventListener(
     'contextmenu',
     e => {
-      if (settings.autoSecondary.enabled && isPlaying) e.preventDefault()
+      if (shouldHoldSecondary()) e.preventDefault()
     },
     true
   )
-
-  window.addEventListener('blur', releaseSecondary)
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) releaseSecondary()
-  })
 
   // ------- Mod panel UI -------
   const menu = document.createElement('div')
