@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Arras.io Mod Panel
 // @namespace    https://github.com/efoneon/arras-mod-panel
-// @version      2.0.1
+// @version      2.0.2
 // @description  Mod panel for arras.io with a customizable cursor reticle and auto-hold right-click for tank secondary abilities. Press \ to open the menu.
 // @homepageURL  https://github.com/efoneon/arras-mod-panel
 // @supportURL   https://github.com/efoneon/arras-mod-panel/issues
@@ -240,18 +240,34 @@
   // doesn't pop the browser menu over the game.
   let autoSecondaryHeld = false
 
-  const fireMouseEvent = (type, target) => {
+  // Dispatch the right-button press/release as both a PointerEvent and a
+  // MouseEvent, since arras.io may listen on either. `down` => button held,
+  // `up` => released. Targets both the canvas and window/document so the
+  // game's listener catches it regardless of where it's attached.
+  const fireSecondaryEvent = (down, target) => {
     if (!target) return
-    const evt = new MouseEvent(type, {
+    const common = {
       bubbles: true,
       cancelable: true,
       view: window,
       button: 2,
-      buttons: type === 'mouseup' ? 0 : 2,
+      buttons: down ? 2 : 0,
       clientX: mouseX,
       clientY: mouseY,
-    })
-    target.dispatchEvent(evt)
+    }
+    if (typeof PointerEvent === 'function') {
+      target.dispatchEvent(
+        new PointerEvent(down ? 'pointerdown' : 'pointerup', {
+          ...common,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+        })
+      )
+    }
+    target.dispatchEvent(
+      new MouseEvent(down ? 'mousedown' : 'mouseup', common)
+    )
   }
 
   const holdSecondary = () => {
@@ -259,14 +275,14 @@
     const canvas = document.querySelector('canvas')
     if (!canvas) return
     autoSecondaryHeld = true
-    fireMouseEvent('mousedown', canvas)
+    fireSecondaryEvent(true, canvas)
   }
 
   const releaseSecondary = () => {
     if (!autoSecondaryHeld) return
     autoSecondaryHeld = false
     const canvas = document.querySelector('canvas')
-    fireMouseEvent('mouseup', canvas)
+    fireSecondaryEvent(false, canvas)
   }
 
   const updateAutoSecondary = () => {
@@ -281,7 +297,7 @@
     () => {
       if (!autoSecondaryHeld) return
       const canvas = document.querySelector('canvas')
-      fireMouseEvent('mousedown', canvas)
+      fireSecondaryEvent(true, canvas)
     },
     {passive: true, capture: true}
   )
@@ -323,9 +339,10 @@
 
   const sectionHeaderStyle = `
     display:flex;align-items:center;justify-content:space-between;
-    margin:6px -4px 4px;padding:4px 6px;border-radius:6px;
-    background:rgba(255,255,255,0.04);
+    margin:6px -4px 4px;padding:8px 8px;border-radius:6px;
+    background:rgba(255,255,255,0.04);cursor:pointer;
   `
+  const caretStyle = 'opacity:0.8;font-size:18px;line-height:1;'
   const inputBaseStyle =
     'background:#1c1f26;color:#fff;border:1px solid #333;border-radius:6px;padding:4px 6px;'
 
@@ -336,8 +353,8 @@
     </div>
 
     <div class="arras-mod-section-header" data-section="cursor" style="${sectionHeaderStyle}">
-      <strong style="font-size:12px;">Cursor</strong>
-      <span data-caret="cursor" style="opacity:0.7;">▾</span>
+      <strong style="font-size:12px;pointer-events:none;">Cursor</strong>
+      <span data-caret="cursor" style="${caretStyle}pointer-events:none;">▾</span>
     </div>
     <div data-section-body="cursor">
       <label style="display:flex;align-items:center;gap:8px;margin:6px 0;">
@@ -371,8 +388,8 @@
     </div>
 
     <div class="arras-mod-section-header" data-section="autoSecondary" style="${sectionHeaderStyle}">
-      <strong style="font-size:12px;">Auto Secondary Fire</strong>
-      <span data-caret="autoSecondary" style="opacity:0.7;">▾</span>
+      <strong style="font-size:12px;pointer-events:none;">Auto Secondary Fire</strong>
+      <span data-caret="autoSecondary" style="${caretStyle}pointer-events:none;">▾</span>
     </div>
     <div data-section-body="autoSecondary">
       <label style="display:flex;align-items:center;gap:8px;margin:6px 0;">
@@ -388,20 +405,6 @@
   `
 
   document.body.appendChild(menu)
-
-  // Stop key/mouse events from reaching the game while interacting with the menu
-  ;[
-    'keydown',
-    'keyup',
-    'keypress',
-    'mousedown',
-    'mouseup',
-    'click',
-    'wheel',
-    'contextmenu',
-  ].forEach(ev => {
-    menu.addEventListener(ev, e => e.stopPropagation(), true)
-  })
 
   const getByPath = (obj, path) =>
     path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj)
@@ -462,6 +465,22 @@
       syncUiFromSettings()
       return
     }
+  })
+
+  // Stop menu interactions from reaching the game. Registered in the BUBBLE
+  // phase and AFTER the functional handlers above, so clicks/inputs are fully
+  // processed by the menu first, then prevented from escaping to the canvas.
+  ;[
+    'keydown',
+    'keyup',
+    'keypress',
+    'mousedown',
+    'mouseup',
+    'click',
+    'wheel',
+    'contextmenu',
+  ].forEach(ev => {
+    menu.addEventListener(ev, e => e.stopPropagation())
   })
 
   let menuVisible = true
